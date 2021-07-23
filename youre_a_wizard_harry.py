@@ -3,7 +3,7 @@ import copy
 import numpy as np
 
 target_size_factor = 100
-show_targets = False
+show_targets = True
 user_progress = []
 
 targets = [
@@ -17,7 +17,7 @@ targets = [
         "color": (0, 0, 255)
     }, {
         "name": "c",
-        "start_point": (150, 150),
+        "start_point": (200, 200),
         "color": (0, 0, 255)
     }
 ]
@@ -48,7 +48,7 @@ def target_dimensions_hexagon(target):
     point_3 = [(point_2[0] + target_size_factor), (point_2[1] + target_size_factor)]
     point_4 = [point_3[0], (point_3[1] + target_size_factor)]
     point_5 = [(point_4[0] - target_size_factor), (point_4[1] + target_size_factor)]
-    point_6 = [(point_5 - target_size_factor), point_5[1]]
+    point_6 = [(point_5[0] - target_size_factor), point_5[1]]
     point_7 = [(point_6[0] - target_size_factor), (point_6[1] - target_size_factor)]
     point_8 = [point_7[0], (point_7[1] - target_size_factor)]
     return [point_1, point_2, point_3, point_4, point_5, point_6, point_7, point_8]
@@ -73,10 +73,10 @@ def spell_target_hit(x, y):
 
 def possible_spells():
     spells_possible = copy.copy(spells)
-    for step_name in user_progress:
-        progress_index = user_progress.index(step_name)
+    for target_name in user_progress:
+        progress_index = user_progress.index(target_name)
         for spell in spells:
-            sequence_index = spell['sequence'].index(step_name)
+            sequence_index = spell['sequence'].index(target_name)
             if progress_index != sequence_index:
                 spells_possible.remove(spell)
     return spells_possible
@@ -87,43 +87,45 @@ def mark_spell_progress(x, y):
     valid_hit = False
     # Check to see if the coordinates intersect any targets
     target_name = spell_target_hit(x, y)
-    # If a target was hit, it's not the most recent target to be hit, and it wasn't hit earlier
-    if target_name and (target_name != user_progress[-1]) and (target_name not in user_progress):
-        # Determine what the index of the next target will be
-        potential_index = len(user_progress)
-        # Check only spells that are possible given the user's current progress
-        for possible_spell in possible_spells():
-            # Use the potential index to determine valid next target
-            next_target = possible_spell.sequence[potential_index]
-            # If the correct target was hit
-            if next_target == target_name:
-                # Mark that there has been a successful hit
-                valid_hit = True
-                # Add the target to the current user progress
-                user_progress.append(target_name)
-                if show_targets:
-                    # Update the color of the target to show that it was successfully registered
-                    for target in targets:
-                        if target["name"] == target_name:
-                            target["color"] = (0, 255, 0)
-                # Check to see if user has successfully completed a spell sequence
-                if user_progress == possible_spell.sequence:
-                    print(possible_spell['name'])
-                    reset_progress()
-        # If the coordinates hit a target but it wasn't in any of the possible spells, start over
-        if not valid_hit:
-            reset_progress()
+    # If a target was hit and it's not the most recent target to be hit
+    if target_name:
+        print(target_name)
+        if (len(user_progress) and (target_name != user_progress[-1]) or not len(user_progress)):
+            # Determine what the index of the next target will be
+            potential_index = len(user_progress)
+            # Check only spells that are possible given the user's current progress
+            for possible_spell in possible_spells():
+                # Use the potential index to determine valid next target
+                next_target = possible_spell["sequence"][potential_index]
+                # If the correct target was hit
+                if next_target == target_name:
+                    # Mark that there has been a successful hit
+                    valid_hit = True
+                    # Add the target to the current user progress
+                    user_progress.append(target_name)
+                    print(user_progress)
+                    if show_targets:
+                        # Update the color of the target to show that it was successfully registered
+                        for target in targets:
+                            if target["name"] == target_name:
+                                target["color"] = (0, 255, 0)
+                    # Check to see if user has successfully completed a spell sequence
+                    if user_progress == possible_spell["sequence"]:
+                        print(possible_spell['name'])
+                        reset_progress()
+            # If the coordinates hit a target but it wasn't in any of the possible spells, start over
+            if not valid_hit:
+                reset_progress()
 
 
 def reset_progress():
+    print('reset')
     # Empty the user's progress
     user_progress.clear()
     # If the targets are drawn on the user's view, set the colors back to default
     if show_targets:
-        for spell in spells:
-            for step in spell.steps:
-                step["color"] = (0, 0, 255)
-
+        for target in targets:
+            target["color"] = (0, 0, 255)
 
 # Initialize Camera Feed
 cap = cv2.VideoCapture(0)
@@ -137,17 +139,16 @@ while True:
     user_view = copy.copy(flipped_frame)
     # If the flag is enabled, draw all of the spell targets on the user's view
     if show_targets:
-        for spell in spells:
-            for step in spell.steps:
-                start_point = step["start_point"]
-                end_point = ((start_point[0] + target_size_factor), (start_point[1] + target_size_factor))
-                pts = np.array(target_dimensions_hexagon(step), np.int32)
-                pts = pts.reshape((-1, 1, 2))
-                color = step["color"]
-                thickness = 2
-                isClosed = True
-                userView = cv2.rectangle(flipped_frame, start_point, end_point, color, 2)
-                user_view = cv2.polyline(flipped_frame, [pts], isClosed, color, thickness)
+        for target in targets:
+            start_point = target["start_point"]
+            end_point = ((start_point[0] + target_size_factor), (start_point[1] + target_size_factor))
+            pts = np.array(target_dimensions_hexagon(target), np.int32)
+            pts = pts.reshape((-1, 1, 2))
+            color = target["color"]
+            thickness = 2
+            isClosed = True
+            user_view = cv2.rectangle(flipped_frame, start_point, end_point, color, 2)
+            # user_view = cv2.polylines(flipped_frame, [pts], isClosed, color, thickness)
 
     # Convert Flipped Frame to Grayscale
     grayFrame = cv2.cvtColor(flipped_frame, cv2.COLOR_BGR2GRAY)
@@ -166,8 +167,6 @@ while True:
             cY = int(M["m01"] / M["m00"])
             flipped_frame = cv2.circle(flipped_frame, (cX, cY), 20, (0, 0, 255), 3)
             mark_spell_progress(cX, cY)
-        else:
-            reset_progress()
 
     # Show Frame
     cv2.imshow('Camera', user_view)
