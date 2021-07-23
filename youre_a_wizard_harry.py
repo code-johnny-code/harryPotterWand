@@ -25,16 +25,16 @@ targets = [
 spells = [
     {
         "name": "Incendio",
-        "sequence": [1, 2, 3]
+        "sequence": ['a', 'b', 'c']
     },
     {
         "name": "Lumos",
-        "sequence": [3, 2, 1]
+        "sequence": ['c', 'b', 'a']
     },
 ]
 
 
-def target_dimensions(step):
+def target_dimensions_box(step):
     top_left = step["start_point"]
     top_right = ((top_left[0] + target_size_factor), top_left[1])
     bottom_right = (top_right[0], (top_left[1] + target_size_factor))
@@ -55,13 +55,24 @@ def target_dimensions_hexagon(step):
 
 
 def spell_step_hit(step, x, y):
-    target_box = target_dimensions(step)
+    target_box = target_dimensions_box(step)
     top_edge = target_box[0][1]
     bottom_edge = target_box[2][0]
     left_edge = target_box[0][0]
     right_edge = target_box[1][0]
     in_box = top_edge >= x >= bottom_edge and left_edge <= y <= right_edge
     return in_box
+
+
+def possible_spells():
+    spells_possible = copy.copy(spells)
+    for step_name in user_progress:
+        progress_index = user_progress.index(step_name)
+        for spell in spells:
+            sequence_index = spell['sequence'].index(step_name)
+            if progress_index != sequence_index:
+                spells_possible.remove(spell)
+    return spells_possible
 
 
 def mark_spell_progress(x, y):
@@ -104,17 +115,17 @@ while True:
     # My camera is upside down, so I need to flip the frame over
     flipped_frame = cv2.flip(frame, 0)
     # Make a copy of the flipped frame to show the user
-    user_view = copy.deepcopy(flipped_frame)
+    user_view = copy.copy(flipped_frame)
     # If the flag is enabled, draw all of the spell targets on the user's view
     if show_targets:
         for spell in spells:
             for step in spell.steps:
-                # userView = cv2.rectangle(flipped_frame, step["start_point"], step["end_point"], step["color"], 2)
                 pts = np.array(target_dimensions_hexagon(step), np.int32)
                 pts = pts.reshape((-1, 1, 2))
                 color = step["color"]
                 thickness = 2
                 isClosed = True
+                userView = cv2.rectangle(flipped_frame, step["start_point"], step["start_point"], step["color"], 2)
                 user_view = cv2.polyline(flipped_frame, [pts], isClosed, color, thickness)
 
     # Convert Flipped Frame to Grayscale
@@ -134,9 +145,11 @@ while True:
             cY = int(M["m01"] / M["m00"])
             flipped_frame = cv2.circle(flipped_frame, (cX, cY), 20, (0, 0, 255), 3)
             mark_spell_progress(cX, cY)
+        else:
+            reset_progress()
 
     # Show Frame
-    cv2.imshow('Camera', userView)
+    cv2.imshow('Camera', user_view)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
