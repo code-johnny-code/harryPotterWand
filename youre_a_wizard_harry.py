@@ -34,16 +34,16 @@ spells = [
 ]
 
 
-def target_dimensions_box(step):
-    top_left = step["start_point"]
+def target_dimensions_box(target):
+    top_left = target["start_point"]
     top_right = ((top_left[0] + target_size_factor), top_left[1])
     bottom_right = (top_right[0], (top_left[1] + target_size_factor))
     bottom_left = (top_left[0], bottom_right[1])
     return [top_left, top_right, bottom_right, bottom_left]
 
 
-def target_dimensions_hexagon(step):
-    point_1 = step["start_point"]
+def target_dimensions_hexagon(target):
+    point_1 = target["start_point"]
     point_2 = [(point_1[0] + target_size_factor), point_1[1]]
     point_3 = [(point_2[0] + target_size_factor), (point_2[1] + target_size_factor)]
     point_4 = [point_3[0], (point_3[1] + target_size_factor)]
@@ -54,14 +54,21 @@ def target_dimensions_hexagon(step):
     return [point_1, point_2, point_3, point_4, point_5, point_6, point_7, point_8]
 
 
-def spell_step_hit(step, x, y):
-    target_box = target_dimensions_box(step)
-    top_edge = target_box[0][1]
-    bottom_edge = target_box[2][0]
-    left_edge = target_box[0][0]
-    right_edge = target_box[1][0]
-    in_box = top_edge >= x >= bottom_edge and left_edge <= y <= right_edge
-    return in_box
+def spell_target_hit(x, y):
+    for target in targets:
+        # Get the target box vertices
+        target_box = target_dimensions_box(target)
+        top_edge = target_box[0][1]
+        bottom_edge = target_box[2][0]
+        left_edge = target_box[0][0]
+        right_edge = target_box[1][0]
+        # If the y coordinate is between the top and bottom edges,
+        # and the x coordinate is between the left and right edges, it's in the box
+        in_box = top_edge <= y <= bottom_edge and left_edge <= x <= right_edge
+        if in_box:
+            return target["name"]
+        else:
+            return False
 
 
 def possible_spells():
@@ -76,30 +83,42 @@ def possible_spells():
 
 
 def mark_spell_progress(x, y):
+    # Start with the assumption that the hit isn't valid
     valid_hit = False
-    for spell in spells:
-        for step in spell.steps:
-            if spell_step_hit(step):
-                correctIndex = spell.sequence.index(step["name"])
-                potentialIndex = len(user_progress)
-                stepAlreadyHit = step["name"] in spell.progress
-                stepIsNext = correctIndex == potentialIndex
-
-                if not stepAlreadyHit and stepIsNext:
-                    spell.progress.append(step["name"])
-                    step["color"] = (0, 255, 0)
-                    if spell.progress == spell.sequence:
-                        spell.cast()
-                        reset_progress()
-                        break
-                elif not stepAlreadyHit and spellHasProgress and not stepIsNext:
+    # Check to see if the coordinates intersect any targets
+    target_name = spell_target_hit(x, y)
+    # If a target was hit, it's not the most recent target to be hit, and it wasn't hit earlier
+    if target_name and (target_name != user_progress[-1]) and (target_name not in user_progress):
+        # Determine what the index of the next target will be
+        potential_index = len(user_progress)
+        # Check only spells that are possible given the user's current progress
+        for possible_spell in possible_spells():
+            # Use the potential index to determine valid next target
+            next_target = possible_spell.sequence[potential_index]
+            # If the correct target was hit
+            if next_target == target_name:
+                # Mark that there has been a successful hit
+                valid_hit = True
+                # Add the target to the current user progress
+                user_progress.append(target_name)
+                if show_targets:
+                    # Update the color of the target to show that it was successfully registered
+                    for target in targets:
+                        if target["name"] == target_name:
+                            target["color"] = (0, 255, 0)
+                # Check to see if user has successfully completed a spell sequence
+                if user_progress == possible_spell.sequence:
+                    print(possible_spell['name'])
                     reset_progress()
-                elif stepAlreadyHit and step["name"] != spell.progress[-1]:
-                    reset_progress()
+        # If the coordinates hit a target but it wasn't in any of the possible spells, start over
+        if not valid_hit:
+            reset_progress()
 
 
 def reset_progress():
+    # Empty the user's progress
     user_progress.clear()
+    # If the targets are drawn on the user's view, set the colors back to default
     if show_targets:
         for spell in spells:
             for step in spell.steps:
@@ -120,12 +139,14 @@ while True:
     if show_targets:
         for spell in spells:
             for step in spell.steps:
+                start_point = step["start_point"]
+                end_point = ((start_point[0] + target_size_factor), (start_point[1] + target_size_factor))
                 pts = np.array(target_dimensions_hexagon(step), np.int32)
                 pts = pts.reshape((-1, 1, 2))
                 color = step["color"]
                 thickness = 2
                 isClosed = True
-                userView = cv2.rectangle(flipped_frame, step["start_point"], step["start_point"], step["color"], 2)
+                userView = cv2.rectangle(flipped_frame, start_point, end_point, color, 2)
                 user_view = cv2.polyline(flipped_frame, [pts], isClosed, color, thickness)
 
     # Convert Flipped Frame to Grayscale
