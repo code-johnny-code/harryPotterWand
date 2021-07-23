@@ -1,126 +1,143 @@
 import cv2
-import os
+import copy
+import numpy as np
 
-class Incendio:
-    
-    def __init__(self):
+target_size_factor = 100
+show_targets = False
+user_progress = []
 
-        def cast():
-            print('INCENDIO')
-            os.system("chromium-browser www.youtube.com/watch?v=QeYoiBmuzOM")
+targets = [
+    {
+        "name": "a",
+        "start_point": (50, 50),
+        "color": (0, 0, 255)
+    }, {
+        "name": "b",
+        "start_point": (150, 150),
+        "color": (0, 0, 255)
+    }, {
+        "name": "c",
+        "start_point": (150, 150),
+        "color": (0, 0, 255)
+    }
+]
 
-        self.steps = [
-            {
-                "name": 1,
-                "start_point": (5,5),
-                "end_point": (100,100),
-                "color": (0, 0, 255)
-            },
-            {
-                "name": 2,
-                "start_point": (200, 200),
-                "end_point": (295,295),
-                "color": (0, 0, 255)
-            },
-            {
-                "name": 3,
-                "start_point": (5, 200),
-                "end_point": (100,295),
-                "color": (0, 0, 255)
-            }
-        ]
-        self.sequence = [1, 2, 3]
-        self.progress = []
-        self.cast = cast
+spells = [
+    {
+        "name": "Incendio",
+        "sequence": [1, 2, 3]
+    },
+    {
+        "name": "Lumos",
+        "sequence": [3, 2, 1]
+    },
+]
 
-spell = Incendio()
 
-def markSpellProgress(spell, cX, cY):
-    
-    def spellStepHit(step):
-        if step["end_point"][0] > cX > step["start_point"][0] and step["end_point"][1] > cY > step["start_point"][1]:
-            return True
-        else:
-            return False
-    
-    for step in spell.steps:
-        if spellStepHit(step):
-            correctIndex = spell.sequence.index(step["name"])
-            potentialIndex = len(spell.progress)
-            spellHasProgress = len(spell.progress)
-            stepAlreadyHit = step["name"] in spell.progress
-            stepIsNext = correctIndex == potentialIndex
-            
-            if not stepAlreadyHit and stepIsNext:
-                spell.progress.append(step["name"])
-                step["color"] = (0, 255, 0)
-                if spell.progress == spell.sequence:
-                    spell.cast()
-                    resetSpell(spell)
-                    break
-            elif not stepAlreadyHit and spellHasProgress and not stepIsNext:
-                resetSpell(spell)
-            elif stepAlreadyHit and step["name"] != spell.progress[-1]:
-                resetSpell(spell)
-            
+def target_dimensions(step):
+    top_left = step["start_point"]
+    top_right = ((top_left[0] + target_size_factor), top_left[1])
+    bottom_right = (top_right[0], (top_left[1] + target_size_factor))
+    bottom_left = (top_left[0], bottom_right[1])
+    return [top_left, top_right, bottom_right, bottom_left]
 
-def resetSpell(spell):
-    spell.progress = []
-    for step in spell.steps:
-        step["color"] = (0, 0, 255)
+
+def target_dimensions_hexagon(step):
+    point_1 = step["start_point"]
+    point_2 = [(point_1[0] + target_size_factor), point_1[1]]
+    point_3 = [(point_2[0] + target_size_factor), (point_2[1] + target_size_factor)]
+    point_4 = [point_3[0], (point_3[1] + target_size_factor)]
+    point_5 = [(point_4[0] - target_size_factor), (point_4[1] + target_size_factor)]
+    point_6 = [(point_5 - target_size_factor), point_5[1]]
+    point_7 = [(point_6[0] - target_size_factor), (point_6[1] - target_size_factor)]
+    point_8 = [point_7[0], (point_7[1] - target_size_factor)]
+    return [point_1, point_2, point_3, point_4, point_5, point_6, point_7, point_8]
+
+
+def spell_step_hit(step, x, y):
+    target_box = target_dimensions(step)
+    top_edge = target_box[0][1]
+    bottom_edge = target_box[2][0]
+    left_edge = target_box[0][0]
+    right_edge = target_box[1][0]
+    in_box = top_edge >= x >= bottom_edge and left_edge <= y <= right_edge
+    return in_box
+
+
+def mark_spell_progress(x, y):
+    valid_hit = False
+    for spell in spells:
+        for step in spell.steps:
+            if spell_step_hit(step):
+                correctIndex = spell.sequence.index(step["name"])
+                potentialIndex = len(user_progress)
+                stepAlreadyHit = step["name"] in spell.progress
+                stepIsNext = correctIndex == potentialIndex
+
+                if not stepAlreadyHit and stepIsNext:
+                    spell.progress.append(step["name"])
+                    step["color"] = (0, 255, 0)
+                    if spell.progress == spell.sequence:
+                        spell.cast()
+                        reset_progress()
+                        break
+                elif not stepAlreadyHit and spellHasProgress and not stepIsNext:
+                    reset_progress()
+                elif stepAlreadyHit and step["name"] != spell.progress[-1]:
+                    reset_progress()
+
+
+def reset_progress():
+    user_progress.clear()
+    if show_targets:
+        for spell in spells:
+            for step in spell.steps:
+                step["color"] = (0, 0, 255)
+
 
 # Initialize Camera Feed
 cap = cv2.VideoCapture(0)
-# incendioImage = cv2.imread('./incendio.jpeg')
-# rows,cols,channels = incendioImage.shape
 
-while(True):
-# Get Frame from Camera Feed
+while True:
+    # Get Frame from Camera Feed
     ret, frame = cap.read()
-    flippedFrame = cv2.flip(frame, 0)
-    for step in spell.steps:
-        userView = cv2.rectangle(flippedFrame, step["start_point"], step["end_point"], step["color"], 2)
-        # test = cv2.putText(test, str(step["name"]), (step["start_point"][0], step["end_point"][1]), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 5)
+    # My camera is upside down, so I need to flip the frame over
+    flipped_frame = cv2.flip(frame, 0)
+    # Make a copy of the flipped frame to show the user
+    user_view = copy.deepcopy(flipped_frame)
+    # If the flag is enabled, draw all of the spell targets on the user's view
+    if show_targets:
+        for spell in spells:
+            for step in spell.steps:
+                # userView = cv2.rectangle(flipped_frame, step["start_point"], step["end_point"], step["color"], 2)
+                pts = np.array(target_dimensions_hexagon(step), np.int32)
+                pts = pts.reshape((-1, 1, 2))
+                color = step["color"]
+                thickness = 2
+                isClosed = True
+                user_view = cv2.polyline(flipped_frame, [pts], isClosed, color, thickness)
 
-# Convert Camera Feed to Grayscale
-    grayFrame = cv2.cvtColor(flippedFrame, cv2.COLOR_BGR2GRAY)
+    # Convert Flipped Frame to Grayscale
+    grayFrame = cv2.cvtColor(flipped_frame, cv2.COLOR_BGR2GRAY)
 
-# Set threshold value and method
+    # Set threshold value and method
     ret, thresh = cv2.threshold(grayFrame, 240, 255, cv2.THRESH_TOZERO)
-    # thresh = cv2.rectangle(thresh, start_point, end_point, color, thickness)
 
-# Find contours
-    edged = cv2.Canny(thresh, 30, 200)
-    im2, contours, hierarchy = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+    # Find contours
+    im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-# Register Centroids of Blobs
+    # Register Centroids of Blobs
     for c in contours:
         M = cv2.moments(c)
         if M["m00"] != 0:
             cX = int(M["m10"] / M["m00"])
             cY = int(M["m01"] / M["m00"])
-            flippedFrame = cv2.circle(flippedFrame, (cX, cY), 20, (0, 0, 255), 3)
-            markSpellProgress(spell, cX, cY)
-            # flippedFrame = cv2.putText(flippedFrame, (str(cX) + ',' + str(cY)), (cX, cY), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
-            # if cX < end_point[0] and cY < end_point[0]:
-                # print('BOOP')
+            flipped_frame = cv2.circle(flipped_frame, (cX, cY), 20, (0, 0, 255), 3)
+            mark_spell_progress(cX, cY)
 
-
-# Track Centroids
-
-
-# Add Targets
-
-
-# Track Centroids intersecting Targets
-
-
-# Show Frame
+    # Show Frame
     cv2.imshow('Camera', userView)
-    # cv2.imshow('Threshold', thresh)
-    # cv2.imshow('Canny', edged)
-    # cv2.imshow('Contours', im2)
-    
+
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
